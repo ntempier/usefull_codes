@@ -3,47 +3,52 @@ import os
 # change "inputFolder"  with your "pathofpatientfolder/mesh/ref_t1mri/yeb_atlas" then copy paste to 3D slicer python console 
 # it will create "pathofpatientfolder/mesh/ref_t1mri/yeb_atlas_volumes" with STNs in nifti
 
+inputFolders = [
+    r"/network/iss/lau-karachi/data_raw/Human/Nicolas_Tempier/ANR_HIFU/vtk2nii/test_patient/mesh/ref_t1mri/yeb_atlas"
+]
 
-inputFolder = r"/network/iss/lau-karachi/data_raw/Human/Nicolas_Tempier/ANR_HIFU/vtk2nii/test_patient/mesh/ref_t1mri/yeb_atlas"
+# ------------------------------------------------------------------------------
 
-# Chemin de sortie (où vous voulez enregistrer les .nii)
-outputFolder = inputFolder + "_volumes"
+rasProps = {"coordinateSystem": slicer.vtkMRMLStorageNode.CoordinateSystemRAS}
+segLogic = slicer.modules.segmentations.logic()
 
-# Vérifie que le dossier de sortie existe, sinon le crée
-if not os.path.isdir(outputFolder):
-    os.makedirs(outputFolder)
+for inputFolder in inputFolders:
+    if not os.path.isdir(inputFolder):
+        print(f"Skip (not found): {inputFolder}")
+        continue
 
-# Parcours des fichiers VTK dans le dossier
-for fileName in os.listdir(inputFolder):
-    if fileName.lower().endswith(".vtk") and "stn" in fileName.lower():
-        vtkPath = os.path.join(inputFolder, fileName)
-        print(f"Traitement du fichier : {vtkPath}")
-        
-        # 1) Charger le VTK comme un modèle
-        loadedModel = slicer.util.loadModel(vtkPath)
-        if not loadedModel:
-            print(f"Impossible de charger {fileName} comme modèle.")
+    outputFolder = inputFolder + "_volumes"
+    os.makedirs(outputFolder, exist_ok=True)
+
+    for fileName in os.listdir(inputFolder):
+        lower_name = fileName.lower()
+        if not lower_name.endswith(".vtk") or "stn" not in lower_name:
             continue
-        
-        # 2) Créer une segmentation et y importer le modèle
-        segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
-        slicer.modules.segmentations.logic().ImportModelToSegmentationNode(loadedModel, segmentationNode)
+        vtkPath = os.path.join(inputFolder, fileName)
+        print(f"→ {vtkPath}")
 
-        # 3) Créer la représentation labelmap
-        segmentationNode.CreateBinaryLabelmapRepresentation()
-        
-        # 4) Exporter la segmentation en labelmap (volume)
-        labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-        slicer.modules.segmentations.logic().ExportAllSegmentsToLabelmapNode(segmentationNode, labelmapVolumeNode)
-        
-        # 5) Sauvegarder le volume en .nii
-        outputName = os.path.splitext(fileName)[0] + ".nii"
-        outputPath = os.path.join(outputFolder, outputName)
-        slicer.util.saveNode(labelmapVolumeNode, outputPath)
-        
-        # Nettoyage si besoin
-        slicer.mrmlScene.RemoveNode(loadedModel)
-        slicer.mrmlScene.RemoveNode(segmentationNode)
-        slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
+        # Load model as RAS
+        modelNode = slicer.util.loadNodeFromFile(vtkPath, "ModelFile", rasProps)
+        if modelNode is None:
+            print(f"   FAILED load")
+            continue
 
-print("Conversion terminée.")
+        # Model → Segmentation
+        segNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode")
+        segLogic.ImportModelToSegmentationNode(modelNode, segNode)
+        segNode.CreateBinaryLabelmapRepresentation()
+
+        # Segmentation → LabelMap volume
+        labelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+        segLogic.ExportAllSegmentsToLabelmapNode(segNode, labelNode)
+
+        # Save NIfTI
+        outPath = os.path.join(outputFolder, os.path.splitext(fileName)[0] + ".nii")
+        slicer.util.saveNode(labelNode, outPath)
+
+        # Clean scene
+        for n in (modelNode, segNode, labelNode):
+            slicer.mrmlScene.RemoveNode(n)
+
+print("Done.")
+
