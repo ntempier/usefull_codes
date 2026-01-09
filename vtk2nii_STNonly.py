@@ -1,5 +1,9 @@
 import os
 
+# change "inputFolder"  with your "pathofpatientfolder/mesh/ref_t1mri/yeb_atlas" then copy paste to 3D slicer python console 
+# it will create "pathofpatientfolder/mesh/ref_t1mri/yeb_atlas_volumes" with STNs in nifti
+
+
 inputFolder = r"/network/iss/lau-karachi/data_raw/Human/Nicolas_Tempier/ANR_HIFU/vtk2nii/test_patient/mesh/ref_t1mri/yeb_atlas"
 
 # Chemin de sortie (où vous voulez enregistrer les .nii)
