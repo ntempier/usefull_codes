@@ -1,4 +1,5 @@
 import os
+import shutil
 
 
 def _read_xfm_matrix(xfm_path):
@@ -11,7 +12,10 @@ def _read_xfm_matrix(xfm_path):
             parts = line.split()
             if len(parts) < 4:
                 continue
-            rows.append([float(p) for p in parts[:4]])
+            try:
+                rows.append([float(p) for p in parts[:4]])
+            except ValueError:
+                continue
             if len(rows) == 4:
                 break
     if len(rows) != 4:
@@ -73,6 +77,16 @@ def _write_tfm(tfm_path, r, t):
         handle.write("FixedParameters: 0 0 0\n")
 
 
+def _is_itk_transform(path):
+    with open(path, "r") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            return line.startswith("#Insight Transform File")
+    return False
+
+
 def xfm_to_tfm(xfm_path, tfm_path=None):
     if not os.path.isfile(xfm_path):
         raise FileNotFoundError(f"XFM introuvable: {xfm_path}")
@@ -80,6 +94,11 @@ def xfm_to_tfm(xfm_path, tfm_path=None):
     if tfm_path is None:
         base, _ = os.path.splitext(xfm_path)
         tfm_path = base + ".tfm"
+
+    if _is_itk_transform(xfm_path):
+        if os.path.abspath(xfm_path) != os.path.abspath(tfm_path):
+            shutil.copyfile(xfm_path, tfm_path)
+        return tfm_path
 
     m = _read_xfm_matrix(xfm_path)
     r = [m[0][:3], m[1][:3], m[2][:3]]
@@ -89,3 +108,5 @@ def xfm_to_tfm(xfm_path, tfm_path=None):
     r_out, t_out = _apply_lps_flip(r_inv, t_inv)
     _write_tfm(tfm_path, r_out, t_out)
     return tfm_path
+
+xfm_to_tfm('/network/iss/lau-karachi/data_raw/Human/Nicolas_Tempier/MAGIC_preprocessing/057_TUNE_PD_7T_w2w_yeb_2_lh_t1mri.xfm')
